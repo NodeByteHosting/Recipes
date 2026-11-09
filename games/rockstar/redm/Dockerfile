@@ -36,7 +36,9 @@ RUN         apk add --update --no-cache \
               jq \
               libc6-compat \
               libstdc++ \
+              tar \
               tzdata \
+              xz \
             && adduser -D -h /home/container container
 
 USER        container
@@ -50,12 +52,11 @@ ENV         TXHOST_DATA_PATH=/home/container/txData \
             TXADMIN_ENABLE=1 \
             AUTO_UPDATE=0
 
-COPY        --chmod=755 --chown=container:container start.sh /home/container/start.sh
-COPY        --chmod=755 --chown=container:container entrypoint.sh /home/container/entrypoint.sh
+COPY        --chmod=755 entrypoint.sh /entrypoint.sh
 
 EXPOSE      40120/tcp 30120/udp
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
             CMD curl -f http://localhost:${TXHOST_TXA_PORT:-40120}/api/getStatus 2>/dev/null || exit 1
 
-ENTRYPOINT  ["/home/container/entrypoint.sh"]
+ENTRYPOINT  ["/entrypoint.sh"]

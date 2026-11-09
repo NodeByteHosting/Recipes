@@ -6,7 +6,7 @@
     "exported_at": "2026-05-30T00:00:00+00:00",
     "name": "RedM",
     "author": "NodeByteHosting",
-    "description": "RedM server (RDR2 multiplayer) with txAdmin.",
+    "description": "RedM server (RDR2 multiplayer) with txAdmin. Uses the FiveM Legacy server download.",
     "features": [
         "eula",
         "role_editor"
@@ -15,65 +15,99 @@
         "ghcr.io/nodebytehosting/games:redm": "ghcr.io/nodebytehosting/games:redm"
     },
     "file_denylist": [],
-    "startup": "bash start.sh",
+    "startup": "/entrypoint.sh",
     "config": {
-        "files": "{}",
-        "startup": "{\n  \"done\": \"Server is ready to accept connections\"\n}",
+        "files": "{\n    \"server.cfg\": {\n        \"parser\": \"file\",\n        \"find\": {\n            \"endpoint_add_tcp\": \"endpoint_add_tcp \\\"0.0.0.0:{{server.build.env.TXHOST_FXS_PORT}}\\\"\",\n            \"endpoint_add_udp\": \"endpoint_add_udp \\\"0.0.0.0:{{server.build.env.TXHOST_FXS_PORT}}\\\"\",\n            \"sv_hostname\": \"sv_hostname \\\"{{server.build.env.SERVER_HOSTNAME}}\\\"\",\n            \"sv_licenseKey\": \"sv_licenseKey {{server.build.env.REDM_LICENSE}}\",\n            \"sv_maxclients\": \"sv_maxclients {{server.build.env.MAX_PLAYERS}}\"\n        }\n    }\n}",
+        "startup": "{\n    \"done\": \"succeeded. Welcome!\"\n}",
         "log": "{\n  \"custom\": false,\n  \"location\": \"txData/logs/latest.log\"\n}",
-        "stop": "^C"
+        "stop": "^SIGTERM"
     },
     "scripts": {
-        "installation": "#!/bin/bash\nset -e\n\necho \"Downloading RedM Server...\"\nmkdir -p /home/container/redm\ncd /home/container/redm\n\n# Download the latest RedM server build\nDOWNLOAD_URL=$(curl -sSL https://changelogs-live.fivem.net/api/changelog/versions/linux/server/redm | jq -r '.latest_download' 2>/dev/null)\n\nif [ -z \"$DOWNLOAD_URL\" ] || [ \"$DOWNLOAD_URL\" = \"null\" ]; then\n    echo \"Failed to get download URL\"\n    exit 1\nfi\n\ncurl -sSL \"$DOWNLOAD_URL\" -o server.tar.gz\ntar -xzf server.tar.gz\nrm -f server.tar.gz run.sh\n\necho \"RedM Server downloaded successfully!\"\necho \"\"\necho \"Next steps:\"\necho \"1. Set REDM_LICENSE environment variable with your server key from https://portal.cfx.re/\"\necho \"2. Configure txAdmin port (default: 40120) and server port (default: 30120)\"\necho \"3. Start the server!\"\n"
+        "installation": {
+            "script": "#!/bin/bash\n# RedM Installation Script - NodeByte Hosting\n# Server Files: /mnt/server\napt update -y\napt install -y tar xz-utils curl git file jq unzip\n\nmkdir -p /mnt/server\ncd /mnt/server\n\nRELEASE_PAGE=$(curl -sSL https://runtime.fivem.net/artifacts/fivem/build_proot_linux/master/)\nCHANGELOGS_PAGE=$(curl -sSL https://changelogs-live.fivem.net/api/changelog/versions/linux/server)\n\nif [ ! -d \"./alpine/\" ] && [ ! -d \"./resources/\" ]; then\n  echo \"Beginning installation of new RedM server.\"\n  IS_UPDATE=0\nelse\n  echo \"Beginning update of existing RedM FXServer artifact.\"\n  IS_UPDATE=1\n  if [ -d \"./alpine/\" ]; then\n    echo \"Deleting old FXServer artifact...\"\n    rm -rf ./alpine/\n    echo \"Deleted old FXServer artifact files successfully.\"\n  fi\nfi\n\nif [[ \"${REDM_VERSION}\" == \"recommended\" ]] || [[ -z \"${REDM_VERSION}\" ]]; then\n  DOWNLOAD_LINK=$(echo \"$CHANGELOGS_PAGE\" | jq -r '.recommended_download')\nelif [[ \"${REDM_VERSION}\" == \"latest\" ]]; then\n  DOWNLOAD_LINK=$(echo \"$CHANGELOGS_PAGE\" | jq -r '.latest_download')\nelif [[ \"${REDM_VERSION}\" == http* ]]; then\n  DOWNLOAD_LINK=\"${REDM_VERSION}\"\nelse\n  VERSION_PATH=$(echo \"${RELEASE_PAGE}\" | grep -oE \"build_proot_linux/master/[0-9]+-[a-f0-9]+\\/\" | grep \"${REDM_VERSION}\" | head -n 1)\n  if [ -n \"${VERSION_PATH}\" ]; then\n    DOWNLOAD_LINK=\"https://runtime.fivem.net/artifacts/fivem/${VERSION_PATH}fx.tar.xz\"\n  elif [[ \"${REDM_VERSION}\" == *\"-\"* ]]; then\n    DOWNLOAD_LINK=\"https://runtime.fivem.net/artifacts/fivem/build_proot_linux/master/${REDM_VERSION}/fx.tar.xz\"\n  else\n    echo \"Could not resolve build ${REDM_VERSION}. Defaulting to recommended.\"\n    DOWNLOAD_LINK=$(echo \"$CHANGELOGS_PAGE\" | jq -r '.recommended_download')\n  fi\nfi\n\necho -e \"Downloading artifact from: ${DOWNLOAD_LINK}\"\ncurl -sSL \"${DOWNLOAD_LINK}\" -o fx.tar.xz\n\necho \"Extracting RedM FXServer artifact files...\"\nFILETYPE=$(file -b --mime-type fx.tar.xz)\n\nif [[ \"$FILETYPE\" == *\"x-xz\"* ]] || [[ \"$FILETYPE\" == *\"octet-stream\"* ]]; then\n  tar xvf fx.tar.xz\nelif [[ \"$FILETYPE\" == *\"gzip\"* ]]; then\n  tar xzvf fx.tar.xz\nelif [[ \"$FILETYPE\" == *\"zip\"* ]]; then\n  unzip fx.tar.xz\nelse\n  echo -e \"Downloaded artifact of unknown filetype ($FILETYPE). Exiting.\"\n  rm -f fx.tar.xz\n  exit 2\nfi\n\nrm -f fx.tar.xz run.sh\n\nif [ \"$IS_UPDATE\" -eq 0 ]; then\n  if [ -e server.cfg ]; then\n    echo \"Server config file already exists. Skipping download of new one.\"\n  else\n    echo \"Downloading default RedM server config...\"\n    curl -sSL https://raw.githubusercontent.com/nodebytehosting/recipes/develop/games/rockstar/redm/server.cfg >> server.cfg\n  fi\n  mkdir -p /mnt/server/resources\n  echo \"Preparing to clone default RedM resources.\"\n  git clone https://github.com/citizenfx/cfx-server-data.git /tmp/cfx-resources\n  cp -Rf /tmp/cfx-resources/resources/* resources/\n  rm -rf /tmp/cfx-resources\n  grep -q '^set gamename' server.cfg || echo 'set gamename rdr3' >> server.cfg\n  mkdir -p logs/\n  echo \"Installation complete.\"\nelse\n  echo \"Update complete.\"\nfi",
+            "container": "ghcr.io/nodebytehosting/installers:debian",
+            "entrypoint": "bash"
+        }
     },
     "variables": [
         {
-            "name": "RedM License Key",
-            "description": "Your RedM server license key from https://portal.cfx.re/",
+            "name": "Cfx.re license key",
+            "description": "Required to start the server. Get your key at https://portal.cfx.re/",
             "env_variable": "REDM_LICENSE",
             "default_value": "",
-            "user_viewable": false,
-            "user_editable": true,
-            "rules": "nullable|string|max:128",
-            "field_type": "text"
-        },
-        {
-            "name": "Auto Update",
-            "description": "Automatically download and update RedM server binaries on startup",
-            "env_variable": "AUTO_UPDATE",
-            "default_value": "0",
             "user_viewable": true,
             "user_editable": true,
-            "rules": "required|in:0,1",
+            "rules": "required|string|max:64",
             "field_type": "text"
         },
         {
-            "name": "txAdmin Port",
-            "description": "Port for the txAdmin web panel",
-            "env_variable": "TXHOST_TXA_PORT",
-            "default_value": "40120",
+            "name": "Server name",
+            "description": "",
+            "env_variable": "SERVER_HOSTNAME",
+            "default_value": "My RedM Server",
             "user_viewable": true,
             "user_editable": true,
-            "rules": "required|numeric|between:1024,65535",
+            "rules": "required|string|max:100",
             "field_type": "text"
         },
         {
-            "name": "Server Port",
-            "description": "Main server port for RedM connections",
-            "env_variable": "TXHOST_FXS_PORT",
-            "default_value": "30120",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "required|numeric|between:1024,65535",
-            "field_type": "text"
-        },
-        {
-            "name": "Max Players",
-            "description": "Maximum number of player slots",
+            "name": "Max players",
+            "description": "",
             "env_variable": "MAX_PLAYERS",
             "default_value": "32",
             "user_viewable": true,
             "user_editable": true,
-            "rules": "required|numeric|between:1,1024",
+            "rules": "required|integer|between:1,2048",
+            "field_type": "text"
+        },
+        {
+            "name": "Server version",
+            "description": "Set to \"recommended\", \"latest\", a build number or a direct download URL. RedM uses the FiveM Legacy server download. Reinstall the server to apply a change.",
+            "env_variable": "REDM_VERSION",
+            "default_value": "recommended",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:200",
+            "field_type": "text"
+        },
+        {
+            "name": "Require Steam login",
+            "description": "Only let players join if their Steam account is linked to their Cfx.re account. Needs server version 38004 or newer.",
+            "env_variable": "REQUIRE_STEAM_AUTH",
+            "default_value": "0",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|in:1,0",
+            "field_type": "text"
+        },
+        {
+            "name": "Enable txAdmin",
+            "description": "Run txAdmin on the second port and manage the server from there.",
+            "env_variable": "TXADMIN_ENABLE",
+            "default_value": "0",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|in:1,0",
+            "field_type": "text"
+        },
+        {
+            "name": "Server port",
+            "description": "",
+            "env_variable": "TXHOST_FXS_PORT",
+            "default_value": "30120",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:5",
+            "field_type": "text"
+        },
+        {
+            "name": "txAdmin port",
+            "description": "",
+            "env_variable": "TXHOST_TXA_PORT",
+            "default_value": "40120",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:5",
             "field_type": "text"
         }
     ]

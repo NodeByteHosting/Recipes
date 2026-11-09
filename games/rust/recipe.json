@@ -12,15 +12,19 @@
         "ghcr.io/nodebytehosting/games:rust": "ghcr.io/nodebytehosting/games:rust"
     },
     "file_denylist": [],
-    "startup": "bash start.sh",
+    "startup": "./RustDedicated -batchmode +server.port {{SERVER_PORT}} +server.queryport {{QUERY_PORT}} +server.identity \"rust\" +rcon.port {{RCON_PORT}} +rcon.web true +rcon.password \\\"{{RCON_PASS}}\\\" +server.hostname \\\"{{RUST_SERVER_NAME}}\\\" +server.description \\\"{{RUST_SERVER_DESCRIPTION}}\\\" +server.url \\\"{{RUST_SERVER_URL}}\\\" +server.seed {{RUST_SERVER_SEED}} +server.worldsize {{RUST_SERVER_WORLDSIZE}} +server.maxplayers {{RUST_SERVER_MAXPLAYERS}} +server.tickrate {{RUST_SERVER_TICKRATE}} +server.saveinterval {{RUST_SERVER_SAVEINTERVAL}}",
     "config": {
         "files": "{}",
-        "startup": "{\n  \"done\": \"Server started successfully\"\n}",
+        "startup": "{\n    \"done\": \"Server startup complete\"\n}",
         "log": "{\n  \"custom\": false,\n  \"location\": \"latest.log\"\n}",
         "stop": "^C"
     },
     "scripts": {
-        "installation": "#!/bin/bash\nset -e\n\necho \"Installing Rust Server...\"\nmkdir -p /home/container\n\necho \"Downloading Rust server via steamcmd...\"\ncd /home/container\n\n# Check if steamcmd is available, otherwise download it\nif [ ! -f /usr/local/bin/steamcmd ]; then\n    echo \"Installing steamcmd...\"\n    apk add --no-cache curl\n    mkdir -p /home/steam/steamcmd\n    cd /home/steam/steamcmd\n    curl -sqL 'https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz' | tar zxvf -\n    ln -s /home/steam/steamcmd/steamcmd.sh /usr/local/bin/steamcmd\nfi\n\necho \"Fetching latest Rust server build...\"\nsteamcmd +login anonymous +app_update 258550 validate +quit\n\necho \"Rust Server installed!\"\necho \"Set AUTO_UPDATE=1 to automatically update on startup\"\n"
+        "installation": {
+            "script": "#!/bin/bash\nset -e\n\napt-get update -y\napt-get install -y --no-install-recommends ca-certificates curl lib32gcc-s1 lib32stdc++6 tar\n\nmkdir -p /mnt/server/steamcmd\ncd /mnt/server/steamcmd\ncurl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar -xzf -\n\nexport HOME=/mnt/server\n./steamcmd.sh +force_install_dir /mnt/server +login anonymous +app_update 258550 validate +quit\n\nmkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64\ncp -f linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so\ncp -f linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so\n\necho \"Rust server installed.\"\n",
+            "container": "ghcr.io/nodebytehosting/installers:debian",
+            "entrypoint": "bash"
+        }
     },
     "variables": [
         {
@@ -67,7 +71,7 @@
             "name": "World Seed",
             "description": "World seed for deterministic generation (empty for random)",
             "env_variable": "RUST_SERVER_SEED",
-            "default_value": "",
+            "default_value": "12345",
             "user_viewable": true,
             "user_editable": true,
             "rules": "nullable|numeric",
@@ -111,6 +115,36 @@
             "user_viewable": true,
             "user_editable": true,
             "rules": "required|numeric|between:60,3600",
+            "field_type": "text"
+        },
+        {
+            "name": "Query Port",
+            "description": "Port for server list queries.",
+            "env_variable": "QUERY_PORT",
+            "default_value": "28017",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|numeric|between:1024,65535",
+            "field_type": "text"
+        },
+        {
+            "name": "RCON Port",
+            "description": "Port for RCON.",
+            "env_variable": "RCON_PORT",
+            "default_value": "28016",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|numeric|between:1024,65535",
+            "field_type": "text"
+        },
+        {
+            "name": "RCON Password",
+            "description": "Password for RCON.",
+            "env_variable": "RCON_PASS",
+            "default_value": "changeme",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:64",
             "field_type": "text"
         }
     ]
