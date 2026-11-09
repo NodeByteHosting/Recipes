@@ -74,7 +74,7 @@ echo -e "${Text} Server Port: ${TXHOST_FXS_PORT}"
 echo -e "${Text} Max Slots: ${TXHOST_MAX_SLOTS:-unlimited}"
 
 # Auto-update check and download
-if [ "${AUTO_UPDATE}" = "1" ]; then
+if [ "${AUTO_UPDATE}" = "1" ] && [ ! -f "$(pwd)/alpine/opt/cfx-server/cfx-server" ]; then
     echo -e "${Text} ${BLUE}Checking for updates...${NC}"
     
     CFX_CHANGELOGS=$(curl -sSL https://changelogs-live.fivem.net/api/changelog/versions/linux/server 2>/dev/null)
@@ -104,8 +104,23 @@ fi
 
 echo -e "${Text} ${BLUE}Starting FiveM Server...${NC}"
 
-SERVER_BIN_PATH="$(pwd)/alpine/opt/cfx-server/FXServer"
-LD_PATH="$(pwd)/alpine/opt/cfx-server/ld-musl-x86_64.so.1"
+GAME_BUILD_ARGS=""
+STEAM_AUTH_ARGS=""
+if [ "${REQUIRE_STEAM_AUTH}" = "1" ]; then
+    STEAM_AUTH_ARGS="+set sv_enforceSteamAuth true"
+fi
+if [ -f "$(pwd)/alpine/opt/cfx-server/cfx-server" ]; then
+    SERVER_BIN_PATH="$(pwd)/alpine/opt/cfx-server/cfx-server"
+    LD_PATH="$(pwd)/alpine/lib/ld-musl-x86_64.so.1"
+    LIBRARY_PATH="$(pwd)/alpine/lib/:$(pwd)/alpine/usr/lib/"
+else
+    SERVER_BIN_PATH="$(pwd)/alpine/opt/cfx-server/FXServer"
+    LD_PATH="$(pwd)/alpine/opt/cfx-server/ld-musl-x86_64.so.1"
+    LIBRARY_PATH="$(pwd)/alpine/usr/lib/v8/:$(pwd)/alpine/lib/:$(pwd)/alpine/usr/lib/:$(pwd)/alpine/opt/cfx-server/lib/"
+    if [ -n "${SV_GAMEBUILD}" ]; then
+        GAME_BUILD_ARGS="+set sv_enforceGameBuild ${SV_GAMEBUILD}"
+    fi
+fi
 
 # Validate binary paths
 if [ ! -f "$SERVER_BIN_PATH" ]; then
@@ -127,10 +142,11 @@ fi
 
 # Execute FiveM server
 exec "$LD_PATH" \
-    --library-path "$(pwd)/alpine/usr/lib/v8/:$(pwd)/alpine/lib/:$(pwd)/alpine/usr/lib/:$(pwd)/alpine/opt/cfx-server/lib/" \
+    --library-path "$LIBRARY_PATH" \
     -- "$SERVER_BIN_PATH" \
     +set citizen_dir "$(pwd)/alpine/opt/cfx-server/citizen/" \
     +set sv_licenseKey ${FIVEM_LICENSE} \
-    +set steam_webApiKey ${STEAM_WEBAPIKEY} \
     +set sv_maxplayers ${MAX_PLAYERS} \
+    $GAME_BUILD_ARGS \
+    $STEAM_AUTH_ARGS \
     $TXADMIN_ARGS
