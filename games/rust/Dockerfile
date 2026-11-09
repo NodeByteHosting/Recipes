@@ -20,7 +20,7 @@
 # SOFTWARE.
 #
 
-FROM        --platform=$TARGETOS/$TARGETARCH alpine:3.20
+FROM        --platform=$TARGETOS/$TARGETARCH debian:bookworm-slim
 
 LABEL       author="Tyler Hodgkin" maintainer="tyler.h@nodebyte.co.uk"
 
@@ -29,28 +29,32 @@ LABEL       org.opencontainers.image.description="Rust server dedicated containe
 LABEL       org.opencontainers.image.licenses=MIT
 LABEL       org.opencontainers.image.version="latest"
 
-RUN         apk add --update --no-cache \
+RUN         apt-get update \
+            && apt-get install -y --no-install-recommends \
               bash \
               ca-certificates \
               curl \
-              libstdc++ \
-              libgcc \
-              npm \
+              iproute2 \
+              lib32gcc-s1 \
+              lib32stdc++6 \
+              libsdl2-2.0-0 \
               nodejs \
+              tar \
               tzdata \
               unzip \
-            && adduser -D -h /home/container container
+            && rm -rf /var/lib/apt/lists/* \
+            && useradd -m -d /home/container -s /bin/bash container
 
 USER        container
 ENV         USER=container HOME=/home/container
 WORKDIR     /home/container
 
-COPY        --chmod=755 --chown=container:container entrypoint.sh /home/container/entrypoint.sh
-COPY        --chmod=755 --chown=container:container wrapper.js /home/container/wrapper.js
+COPY        --chmod=755 entrypoint.sh /entrypoint.sh
+COPY        --chmod=755 wrapper.js /wrapper.js
 
 EXPOSE      28015/udp 28016/tcp 8080/tcp
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
             CMD test -f /proc/1/cmdline || exit 1
 
-ENTRYPOINT  ["/home/container/entrypoint.sh"]
+ENTRYPOINT  ["/entrypoint.sh"]

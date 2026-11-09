@@ -1,4 +1,4 @@
-#!/bin/ash
+#!/bin/bash
 #
 # Copyright (c) 2026 NodeByte LTD
 #
@@ -62,4 +62,4 @@ fi
 export LD_LIBRARY_PATH=$(pwd)/RustDedicated_Data/Plugins/x86_64:$(pwd):${LD_LIBRARY_PATH}
 
 # Run the server via Node.js wrapper for output filtering and RCON
-node /home/container/wrapper.js "${MODIFIED_STARTUP}"
+node /wrapper.js "${MODIFIED_STARTUP}"
