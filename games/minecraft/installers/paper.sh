@@ -13,9 +13,20 @@ if [ "$VERSION" = "LATEST" ]; then
 
 	ALL_VERSIONS=$(curl -s -H "User-Agent: $USER_AGENT" "https://fill.papermc.io/v3/projects/${PROJECT}" \
 		| jq -r '.versions | to_entries[] | .value[]' \
-    	| sort -V -r)
-
-	VERSION=$(echo "$ALL_VERSIONS" | head -n 1)
+		| grep -vE -- '-(rc|pre)' \
+		| sort -V -r)
+	VERSION=""
+	for CANDIDATE in $ALL_VERSIONS; do
+		if curl -s -H "User-Agent: $USER_AGENT" "https://fill.papermc.io/v3/projects/${PROJECT}/versions/${CANDIDATE}/builds" \
+			| jq -e 'any(.[]; .channel == "STABLE")' > /dev/null 2>&1; then
+			VERSION="$CANDIDATE"
+			break
+		fi
+	done
+	if [ -z "$VERSION" ]; then
+		echo "Error: No stable Paper version found."
+		exit 1
+	fi
 fi
 
 echo "Target MC version: $VERSION"
